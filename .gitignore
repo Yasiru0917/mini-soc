@@ -1,0 +1,26 @@
+# ---- Secrets: NEVER commit these ----
+.env
+.env.*
+!.env.example
+
+# ---- Python ----
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# ---- Node / frontend ----
+node_modules/
+dist/
+
+# ---- Runtime data (databases, uploaded evidence, scan output) ----
+*.db
+*.sqlite3
+backend/data/
+
+# ---- Editor / OS ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

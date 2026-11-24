@@ -1,0 +1,85 @@
+/*
+ * Mini SOC global styles (Tailwind CSS v4).
+ *
+ * Tailwind v4 is configured in CSS, not in a tailwind.config.js file.
+ * The @theme block defines our design tokens. Each `--color-*` variable
+ * automatically becomes a utility class, e.g. `--color-soc-panel`
+ * gives us `bg-soc-panel`, `text-soc-panel`, `border-soc-panel`.
+ *
+ * Keeping all colours here means the whole app stays visually
+ * consistent, and a re-theme only needs changes in this one file.
+ */
+@import "tailwindcss";
+
+@theme {
+  /* Surfaces: from darkest (page) to lightest (raised elements) */
+  --color-soc-bg: #070b12;
+  --color-soc-panel: #0d141f;
+  --color-soc-raised: #131c2a;
+  --color-soc-border: #1e2a3b;
+
+  /* Text */
+  --color-soc-text: #d7e1ee;
+  --color-soc-muted: #8193a8;
+
+  /* Brand accent (cyan is common in SOC tooling: readable on dark) */
+  --color-soc-accent: #22d3ee;
+
+  /* Severity scale - used ONLY for severity, so colour always means risk */
+  --color-sev-critical: #f43f5e;
+  --color-sev-high: #f97316;
+  --color-sev-medium: #eab308;
+  --color-sev-low: #38bdf8;
+  --color-sev-info: #94a3b8;
+
+  /* Simulated/demo data marker - deliberately different from severities */
+  --color-demo: #c084fc;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "Consolas", monospace;
+}
+
+/* Base element styles */
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-soc-bg text-soc-text font-sans antialiased;
+  }
+  /* Visible keyboard focus everywhere (accessibility) */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-soc-accent;
+  }
+}
+
+/*
+ * Reusable component classes, so pages don't repeat long class lists.
+ * Tailwind v4 note: these use `@utility` (not `@layer components` as in v3)
+ * so they can be combined with each other via @apply (btn-primary uses btn)
+ * and still be overridden by normal utilities like `px-3` in the markup.
+ */
+@utility card {
+  @apply rounded-xl border border-soc-border bg-soc-panel;
+}
+@utility card-title {
+  @apply text-sm font-semibold tracking-wide text-soc-text;
+}
+@utility input {
+  @apply w-full rounded-lg border border-soc-border bg-soc-bg px-3 py-2 text-sm
+    text-soc-text placeholder:text-soc-muted/70
+    disabled:cursor-not-allowed disabled:opacity-50;
+}
+@utility label {
+  @apply mb-1 block text-xs font-medium uppercase tracking-wider text-soc-muted;
+}
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium
+    transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+}
+@utility btn-primary {
+  @apply btn bg-soc-accent text-soc-bg hover:bg-cyan-300;
+}
+@utility btn-secondary {
+  @apply btn border border-soc-border bg-soc-raised text-soc-text hover:bg-soc-border;
+}
