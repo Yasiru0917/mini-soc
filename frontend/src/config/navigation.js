@@ -42,6 +42,11 @@ export const NAV_GROUPS = [
 // Flat list, handy for looking up the current page by URL.
 export const NAV_ITEMS = NAV_GROUPS.flatMap((group) => group.items)
 
+// Exact match first ("/"), then the section a detail page belongs to
+// ("/alerts/12" -> Alerts).
 export function findNavItem(pathname) {
-  return NAV_ITEMS.find((item) => item.to === pathname)
+  return (
+    NAV_ITEMS.find((item) => item.to === pathname) ??
+    NAV_ITEMS.find((item) => item.to !== '/' && pathname.startsWith(`${item.to}/`))
+  )
 }

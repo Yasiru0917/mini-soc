@@ -25,6 +25,10 @@ class Severity(StrEnum):
     INFO = "info"
 
 
+# Used to sort severities and pick the "worst" one (higher = worse).
+SEVERITY_RANK = {Severity.INFO: 0, Severity.LOW: 1, Severity.MEDIUM: 2, Severity.HIGH: 3, Severity.CRITICAL: 4}
+
+
 class AlertStatus(StrEnum):
     NEW = "new"
     INVESTIGATING = "investigating"
@@ -44,6 +48,29 @@ class IncidentStatus(StrEnum):
 
 # Statuses that still need analyst work.
 OPEN_INCIDENT_STATUSES = (IncidentStatus.NEW, IncidentStatus.INVESTIGATING, IncidentStatus.CONTAINED)
+
+# --- Investigation workflow ---------------------------------------------------
+# Which status changes are allowed. A workflow stops mistakes such as closing
+# an alert that nobody looked at, and makes the process auditable.
+ALERT_TRANSITIONS: dict[AlertStatus, set[AlertStatus]] = {
+    AlertStatus.NEW: {AlertStatus.INVESTIGATING, AlertStatus.RESOLVED, AlertStatus.FALSE_POSITIVE},
+    AlertStatus.INVESTIGATING: {AlertStatus.RESOLVED, AlertStatus.FALSE_POSITIVE, AlertStatus.NEW},
+    AlertStatus.RESOLVED: {AlertStatus.CLOSED, AlertStatus.INVESTIGATING},
+    AlertStatus.FALSE_POSITIVE: {AlertStatus.CLOSED, AlertStatus.INVESTIGATING},
+    AlertStatus.CLOSED: {AlertStatus.INVESTIGATING},  # re-open
+}
+
+INCIDENT_TRANSITIONS: dict[IncidentStatus, set[IncidentStatus]] = {
+    IncidentStatus.NEW: {IncidentStatus.INVESTIGATING, IncidentStatus.FALSE_POSITIVE},
+    IncidentStatus.INVESTIGATING: {IncidentStatus.CONTAINED, IncidentStatus.RESOLVED, IncidentStatus.FALSE_POSITIVE},
+    IncidentStatus.CONTAINED: {IncidentStatus.RESOLVED, IncidentStatus.INVESTIGATING},
+    IncidentStatus.RESOLVED: {IncidentStatus.CLOSED, IncidentStatus.INVESTIGATING},
+    IncidentStatus.FALSE_POSITIVE: {IncidentStatus.CLOSED, IncidentStatus.INVESTIGATING},
+    IncidentStatus.CLOSED: {IncidentStatus.INVESTIGATING},  # re-open
+}
+
+# Moving an incident into these states requires a written resolution/justification.
+INCIDENT_NEEDS_RESOLUTION = {IncidentStatus.RESOLVED, IncidentStatus.FALSE_POSITIVE, IncidentStatus.CLOSED}
 
 
 class AlertSource(StrEnum):

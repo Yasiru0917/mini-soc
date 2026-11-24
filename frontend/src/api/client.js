@@ -32,13 +32,16 @@ function messageFrom(body, status) {
 }
 
 export async function apiFetch(path, { method = 'GET', body, signal } = {}) {
+  // FormData (file uploads) is sent as-is; the browser sets the multipart
+  // boundary header itself. Everything else is sent as JSON.
+  const isForm = body instanceof FormData
   let response
   try {
     response = await fetch(`${API_BASE}${path}`, {
       method,
       credentials: 'same-origin',
-      headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      headers: body !== undefined && !isForm ? { 'Content-Type': 'application/json' } : undefined,
+      body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
       signal,
     })
   } catch (err) {
@@ -60,4 +63,19 @@ export async function apiFetch(path, { method = 'GET', body, signal } = {}) {
     throw new ApiError(response.status, messageFrom(data, response.status), data)
   }
   return data
+}
+
+// Build a query string, skipping empty values: qs({a: 1, b: ''}) -> "?a=1"
+export function qs(params) {
+  const search = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') search.set(key, String(value))
+  }
+  const text = search.toString()
+  return text ? `?${text}` : ''
+}
+
+// Direct link for downloads (the browser sends the session cookie itself).
+export function apiUrl(path) {
+  return `${API_BASE}${path}`
 }

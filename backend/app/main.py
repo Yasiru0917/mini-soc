@@ -10,13 +10,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app import (
-    __version__,
-    models,  # noqa: F401  (registers all tables on Base.metadata)
-)
+from app import __version__
 from app.api.router import api_router
 from app.core.config import get_settings
-from app.db.session import Base, engine
+from app.db.migrate import upgrade_database
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -28,9 +25,8 @@ DOCS_PATHS = ("/docs", "/redoc", "/openapi.json")
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    # Create any missing tables at startup. (Phase 9 replaces this with
-    # Alembic migrations, which can also change existing tables safely.)
-    Base.metadata.create_all(bind=engine)
+    # Make sure the database schema is current before serving requests.
+    upgrade_database()
     yield
 
 
@@ -44,6 +40,24 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None if settings.is_production else "/openapi.json",
 )
+
+
+@app.middleware("http")
+async def upload_size_guard(request: Request, call_next):
+    """Reject oversized uploads BEFORE reading the body.
+
+    Without this, the server would receive (and buffer to disk) a 5 GB upload
+    before our per-file checks could reject it - an easy way to fill the disk.
+    Per-type limits (evidence/log/pcap) are enforced again while saving.
+    """
+    if "multipart/form-data" in request.headers.get("content-type", ""):
+        length = request.headers.get("content-length")
+        if length is None:
+            return JSONResponse(status_code=411, content={"detail": "Content-Length required for uploads"})
+        limit = max(settings.max_pcap_bytes, settings.max_evidence_bytes, settings.max_log_bytes) + 1024 * 1024
+        if not length.isdigit() or int(length) > limit:
+            return JSONResponse(status_code=413, content={"detail": "Upload too large"})
+    return await call_next(request)
 
 
 @app.middleware("http")

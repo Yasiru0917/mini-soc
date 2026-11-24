@@ -12,7 +12,9 @@ import RequireAuth from './auth/RequireAuth.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
 import NetworkPage from './pages/NetworkPage.jsx'
 import AlertsPage from './pages/AlertsPage.jsx'
+import AlertDetailPage from './pages/AlertDetailPage.jsx'
 import IncidentsPage from './pages/IncidentsPage.jsx'
+import IncidentDetailPage from './pages/IncidentDetailPage.jsx'
 import LogsPage from './pages/LogsPage.jsx'
 import ThreatIntelPage from './pages/ThreatIntelPage.jsx'
 import ReportsPage from './pages/ReportsPage.jsx'
@@ -34,7 +36,9 @@ export default function App() {
         <Route index element={<DashboardPage />} />
         <Route path="network" element={<NetworkPage />} />
         <Route path="alerts" element={<AlertsPage />} />
+        <Route path="alerts/:id" element={<AlertDetailPage />} />
         <Route path="incidents" element={<IncidentsPage />} />
+        <Route path="incidents/:id" element={<IncidentDetailPage />} />
         <Route path="logs" element={<LogsPage />} />
         <Route path="threat-intel" element={<ThreatIntelPage />} />
         <Route path="reports" element={<ReportsPage />} />

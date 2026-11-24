@@ -15,9 +15,9 @@ import sys
 from pydantic import ValidationError
 from sqlalchemy import select
 
-from app import models  # noqa: F401  (registers tables)
 from app.core.security import hash_password
-from app.db.session import Base, SessionLocal, engine
+from app.db.migrate import upgrade_database
+from app.db.session import SessionLocal
 from app.models import User
 from app.models.enums import Role
 from app.schemas.user import UserCreate
@@ -42,7 +42,7 @@ def main() -> int:
             print(f"Error: {err['loc'][0]}: {err['msg']}", file=sys.stderr)
         return 1
 
-    Base.metadata.create_all(bind=engine)
+    upgrade_database()
     with SessionLocal() as db:
         if db.scalar(select(User).where(User.username == data.username)):
             print(f"Error: user '{data.username}' already exists.", file=sys.stderr)

@@ -42,6 +42,39 @@ class Settings(BaseSettings):
     login_max_failures: int = 5
     login_window_seconds: int = 15 * 60
 
+    # --- File storage & upload limits (bytes) ---
+    data_dir: Path = BACKEND_DIR / "data"
+    max_evidence_bytes: int = 20 * 1024 * 1024
+    max_log_bytes: int = 10 * 1024 * 1024
+    max_pcap_bytes: int = 50 * 1024 * 1024
+
+    # --- Network scanning (Phase 5) ---
+    nmap_path: str = "nmap"
+    # Default authorized scope, used until an admin saves a different one.
+    default_scan_scope: list[str] = ["192.168.56.0/24"]
+    scan_timeout_seconds: int = 15 * 60
+
+    # --- Packet analysis (Phase 6) ---
+    tshark_path: str = "tshark"
+    tshark_timeout_seconds: int = 120
+
+    # --- Wazuh SIEM (Phase 7). Empty URL = integration disabled. ---
+    wazuh_api_url: str = ""          # e.g. https://192.168.56.105:55000
+    wazuh_api_user: str = ""
+    wazuh_api_password: str = ""
+    wazuh_indexer_url: str = ""      # e.g. https://192.168.56.105:9200
+    wazuh_indexer_user: str = ""
+    wazuh_indexer_password: str = ""
+    wazuh_verify_tls: bool = True    # set false ONLY for the lab's self-signed cert
+    wazuh_ca_cert: str = ""          # path to the Wazuh root CA (better than disabling TLS checks)
+    wazuh_min_rule_level: int = Field(default=7, ge=0, le=15)
+
+    # --- Threat intelligence (Phase 8). Empty key = provider disabled. ---
+    abuseipdb_api_key: str = ""
+    virustotal_api_key: str = ""
+    otx_api_key: str = ""
+    threat_intel_cache_hours: int = 24
+
     @field_validator("database_url")
     @classmethod
     def resolve_sqlite_path(cls, value: str) -> str:

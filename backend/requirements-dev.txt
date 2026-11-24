@@ -1,5 +1,5 @@
 # Development/test tools. Install with: pip install -r requirements-dev.txt
 -r requirements.txt
-pytest==9.2.0   # test runner
-httpx==0.28.1   # required by FastAPI's TestClient
-ruff==0.17.6    # linter: catches bugs and style problems
+pytest==9.2.0      # test runner
+ruff==0.17.6       # linter: catches bugs, style and security problems
+pip-audit==2.10.1  # checks installed packages for known vulnerabilities

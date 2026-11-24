@@ -26,7 +26,16 @@ export function SeverityBadge({ severity }) {
   )
 }
 
-// Investigation workflow states for alerts and incidents.
+// Alert workflow states.
+export const ALERT_STATUSES = [
+  { id: 'new', label: 'New' },
+  { id: 'investigating', label: 'Investigating' },
+  { id: 'resolved', label: 'Resolved' },
+  { id: 'false_positive', label: 'False positive' },
+  { id: 'closed', label: 'Closed' },
+]
+
+// Incident workflow states (incidents also have "contained").
 export const STATUSES = [
   { id: 'new', label: 'New' },
   { id: 'investigating', label: 'Investigating' },
