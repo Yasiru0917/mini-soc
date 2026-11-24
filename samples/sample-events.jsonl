@@ -1,0 +1,7 @@
+{"timestamp": "2026-11-24T11:00:00Z", "event_type": "auth_failure", "src_ip": "192.0.2.15", "user": "administrator", "message": "RDP logon failure"}
+{"timestamp": "2026-11-24T11:00:09Z", "event_type": "auth_failure", "src_ip": "192.0.2.15", "user": "administrator", "message": "RDP logon failure"}
+{"timestamp": "2026-11-24T11:00:18Z", "event_type": "auth_failure", "src_ip": "192.0.2.15", "user": "admin", "message": "RDP logon failure"}
+{"timestamp": "2026-11-24T11:00:27Z", "event_type": "auth_failure", "src_ip": "192.0.2.15", "user": "backup", "message": "RDP logon failure"}
+{"timestamp": "2026-11-24T11:00:36Z", "event_type": "auth_failure", "src_ip": "192.0.2.15", "user": "guest", "message": "RDP logon failure"}
+{"timestamp": "2026-11-24T11:01:30Z", "event_type": "auth_success", "src_ip": "192.168.56.1", "user": "analyst", "message": "RDP logon success"}
+{"timestamp": "2026-11-24T11:02:00Z", "event_type": "http_request", "src_ip": "192.168.56.1", "method": "GET", "path": "/", "status": 200}

@@ -18,9 +18,23 @@ class IntegrationStatus:
         return asdict(self)
 
 
+# Standard install locations, tried when a tool is not on PATH
+# (e.g. Wireshark's installer doesn't add tshark to PATH on Windows).
+COMMON_LOCATIONS = {
+    "tshark": [r"C:\Program Files\Wireshark\tshark.exe", "/usr/bin/tshark", "/usr/local/bin/tshark"],
+    "nmap": [r"C:\Program Files (x86)\Nmap\nmap.exe", r"C:\Program Files\Nmap\nmap.exe", "/usr/bin/nmap"],
+}
+
+
 def resolve_binary(path_or_name: str) -> str | None:
     """Return the full path of an executable, or None if it can't be found."""
-    return shutil.which(path_or_name)
+    found = shutil.which(path_or_name)
+    if found:
+        return found
+    for candidate in COMMON_LOCATIONS.get(path_or_name, []):
+        if shutil.which(candidate):
+            return candidate
+    return None
 
 
 def binary_version(name: str, path_or_name: str, version_args: list[str]) -> IntegrationStatus:

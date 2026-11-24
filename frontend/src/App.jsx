@@ -16,6 +16,7 @@ import AlertDetailPage from './pages/AlertDetailPage.jsx'
 import IncidentsPage from './pages/IncidentsPage.jsx'
 import IncidentDetailPage from './pages/IncidentDetailPage.jsx'
 import LogsPage from './pages/LogsPage.jsx'
+import LogUploadPage from './pages/LogUploadPage.jsx'
 import ThreatIntelPage from './pages/ThreatIntelPage.jsx'
 import ReportsPage from './pages/ReportsPage.jsx'
 import SettingsPage from './pages/SettingsPage.jsx'
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="incidents" element={<IncidentsPage />} />
         <Route path="incidents/:id" element={<IncidentDetailPage />} />
         <Route path="logs" element={<LogsPage />} />
+        <Route path="logs/:id" element={<LogUploadPage />} />
         <Route path="threat-intel" element={<ThreatIntelPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="settings" element={<SettingsPage />} />
