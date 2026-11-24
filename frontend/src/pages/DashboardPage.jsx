@@ -19,12 +19,11 @@ import { useApi } from '../hooks/useApi.js'
 
 // Each record says which mechanism produced it.
 const DATA_SOURCES = [
-  { id: 'manual', label: 'Analyst (manual entry)', phase: 4 },
-  { id: 'nmap', label: 'Nmap scan', phase: 5 },
-  { id: 'log_rule', label: 'Log detection rule', phase: 6 },
-  { id: 'pcap', label: 'Packet capture (TShark)', phase: 6 },
-  { id: 'wazuh', label: 'Wazuh SIEM', phase: 7 },
-  { id: 'threat_intel', label: 'Threat intelligence', phase: 8 },
+  { id: 'nmap', label: 'Nmap scan', how: 'Risky exposed services, new devices' },
+  { id: 'log_rule', label: 'Log detection rule', how: 'Rules R-001 to R-005 on uploaded logs' },
+  { id: 'pcap', label: 'Packet capture', how: 'Rule R-006 on uploaded pcaps' },
+  { id: 'wazuh', label: 'Wazuh SIEM', how: 'Imported Wazuh alerts' },
+  { id: 'manual', label: 'Analyst', how: 'Raised manually, under their name' },
 ]
 
 const RECENT_COLUMNS = [
@@ -38,7 +37,7 @@ const RECENT_COLUMNS = [
       </span>
     ),
   },
-  { key: 'src', label: 'Source → Destination', render: (a) => <code className="font-mono text-xs">{a.src_ip ?? '?'} → {a.dst_ip ?? '?'}</code> },
+  { key: 'src', label: 'Source → Destination', render: (a) => <code className="font-mono text-xs">{a.src_ip ?? '—'} → {a.dst_ip ?? '—'}</code> },
   { key: 'source', label: 'Detected by' },
   { key: 'status', label: 'Status', render: (a) => <StatusBadge status={a.status} /> },
   { key: 'detected_at', label: 'Time', render: (a) => new Date(a.detected_at).toLocaleString() },
@@ -167,9 +166,9 @@ export default function DashboardPage() {
           </p>
           <ul className="space-y-1.5 text-sm">
             {DATA_SOURCES.map((src) => (
-              <li key={src.id} className="flex items-center justify-between gap-2">
-                <span>{src.label}</span>
-                <span className="text-xs text-soc-muted">Phase {src.phase}</span>
+              <li key={src.id} className="flex items-baseline justify-between gap-3">
+                <span className="shrink-0">{src.label}</span>
+                <span className="text-right text-xs text-soc-muted">{src.how}</span>
               </li>
             ))}
           </ul>

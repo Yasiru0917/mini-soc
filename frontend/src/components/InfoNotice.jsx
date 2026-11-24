@@ -1,5 +1,5 @@
-// Neutral information banner (as opposed to PlaceholderNotice, which marks
-// unbuilt features). Used to explain what live data does and doesn't cover.
+// Neutral information banner, used to explain what live data does and
+// doesn't cover (e.g. "counts include demo data only when switched on").
 import { Info } from 'lucide-react'
 
 export default function InfoNotice({ title, children }) {

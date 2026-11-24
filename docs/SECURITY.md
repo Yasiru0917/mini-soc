@@ -1,106 +1,112 @@
-# Mini SOC: Security Design
+# Mini SOC: Security Design and Review
 
-This document records the security decisions for the application **before** they are implemented, so the implementation can be checked against them.
+## 1. Threat model
 
-## 1. Threat model (short)
-
-| Asset | Threat | Main control |
+| Asset | Threat | Control (implemented) |
 |---|---|---|
-| User accounts | Password guessing, stolen passwords | Argon2 hashing, login rate limiting, generic error messages |
-| Session tokens | Theft through XSS | Token in an **HttpOnly** cookie that JavaScript cannot read |
-| State-changing requests | CSRF | `SameSite=Strict` cookie, same-origin API, Origin header check |
-| Data and actions | Users exceeding their role | Server-side RBAC on every endpoint |
-| Scanner | Being used against systems we don't own | Server-enforced CIDR allowlist, preset profiles, audit log |
-| Server | Command injection through scan input | No shell, argument list only, strict IP/CIDR validation |
-| Server/storage | Malicious uploads | Size limits, content validation, random filenames, no execution |
-| Secrets | Leaking API keys via git | `.env` only (git-ignored); `.env.example` has no values |
-| Analysts | Trusting fake data | Provenance fields + DEMO badge; no invented detections |
+| User accounts | Password guessing, stolen hashes | Argon2id hashing; 12+ character passwords; rate limiting; generic login errors |
+| Sessions | Token theft through XSS | JWT in an **HttpOnly** cookie that JavaScript can't read |
+| State-changing requests | CSRF | `SameSite=Strict` cookie, same-origin API, server-side Origin check |
+| Data and actions | Users exceeding their role | Server-side RBAC on every endpoint; role read from the database on every request |
+| Scanner | Being pointed at systems we don't own | Server-enforced CIDR scope, no hostnames, max /24, preset profiles, audited |
+| Server | Command injection | `subprocess` argument lists, no shell, targets rebuilt from `ipaddress` objects |
+| Server | Malicious XML from tools | `defusedxml` (no entities / XXE) |
+| Storage | Malicious uploads | Extension allowlist, magic-byte and UTF-8 checks, size limits, UUID names outside the web root, served only as `attachment` |
+| Analysts | Reports weaponised by attacker text | PDF markup escaping; CSV formula neutralisation |
+| Network privacy | Leaking internal indicators | Private/internal IPs and domains are never sent to threat-intel providers |
+| Packet analysis | Malicious pcap | TShark with `-n` (no DNS), packet cap, timeout, isolated Wireshark profile |
+| Secrets | API keys in git | `.env` only (git-ignored); keys never sent to the browser |
+| Trust in data | Fake detections | Provenance fields, DEMO badges, `source` forced on manual alerts |
+| Accountability | Misuse of the tool | Audit log of logins, scans (including refused ones), uploads, lookups, changes, reports |
 
-## 2. Authentication (implemented in Phase 3)
+## 2. Authentication and sessions
 
-Covered by automated tests in `backend/tests/` (24 tests): hashing, cookie flags, generic errors, rate limiting, forged and `alg=none` tokens, logout revocation, role enforcement, immediate demotion, cross-site origin blocking, security headers, and audit-log injection.
+- **Passwords:** Argon2id (`pwdlib`), at least 12 characters (NIST SP 800-63B: length over complexity rules). There's no default account; the first admin is created with `scripts/create_admin.py`.
+- **Login:**
+  - one generic error message for every failure;
+  - unknown usernames still run a dummy hash, so response timing doesn't reveal which usernames exist;
+  - 5 failures per username or IP within 15 minutes → HTTP 429.
+- **Token:** JWT signed with HS256 using `SECRET_KEY` (≥ 32 characters; the app refuses to start without it). It expires after 30 minutes. Only HS256 is accepted, so `alg=none` tokens are rejected.
+- **Cookie:** `soc_session`, with `HttpOnly; SameSite=Strict; Path=/api`, plus `Secure` in production or when `COOKIE_SECURE=true`.
+- **Revocation:** each user has a `token_version`. Logout, password change, password reset, a role change or deactivation increments it, which invalidates every existing token.
+- **Password management:**
+  - Users change their own password, which requires the current one.
+  - Admins can reset other users' passwords. An admin can't demote, disable or reset their own account.
 
-Known limitations (accepted for a single-instance lab app):
-- Login failure counters are kept in memory. They reset when the server restarts and aren't shared between multiple server processes.
-- Logout increments `token_version`, which signs the user out of **all** their sessions, not just the current browser.
-- The client IP comes from `X-Forwarded-For` only when the request arrives from the local Vite proxy (127.0.0.1). This is uvicorn's default trusted-proxy behaviour.
+## 3. Authorization (RBAC)
 
-### Passwords
-- Passwords are hashed with **Argon2id** (`pwdlib[argon2]`). Argon2 is deliberately slow and memory-hard, which makes offline cracking expensive. Plain passwords are never stored or logged.
-- Minimum length is 12 characters. Length is checked, but there are no composition rules (this follows NIST SP 800-63B).
-- Login failures return one generic message ("Invalid username or password"), so attackers can't find out which usernames exist.
-- **Rate limiting:** after 5 failed attempts for a username or IP within 15 minutes, further attempts are temporarily refused.
-- The first admin is created with a CLI script (`scripts/create_admin.py`) that prompts for the password. There is no default `admin/admin` account.
-
-### Tokens
-- On login, the server issues a **JWT** signed with HS256, using a random secret (`SECRET_KEY`, ≥ 32 bytes) loaded from `.env`.
-- Claims: `sub` (user ID), `role`, `exp` (**30 minutes**), `iat`, `jti`, `ver`.
-- The token is set as a cookie with `HttpOnly; SameSite=Strict; Path=/api`, plus `Secure` when served over HTTPS.
-  - *HttpOnly:* injected JavaScript cannot read the token. That's why we don't use `localStorage`.
-  - *SameSite=Strict:* the browser won't send the cookie on requests started by other sites, which blocks CSRF.
-- **Logout and revocation:** each user has a `token_version`. Logging out, changing the password or disabling the account increments it. Any token whose `ver` doesn't match is rejected.
-- The frontend never sees or stores the token. It calls `GET /api/v1/auth/me` to learn who is signed in.
-
-### Authorization (RBAC)
 | Action | Admin | Analyst | Viewer |
 |---|:-:|:-:|:-:|
-| View dashboard, alerts, incidents | ✓ | ✓ | ✓ |
-| Triage alerts, manage incidents | ✓ | ✓ | |
-| Upload logs, run authorized scans | ✓ | ✓ | |
-| Change scan scope and integrations | ✓ | | |
-| Manage users and roles | ✓ | | |
+| View dashboard, alerts, incidents, scans, logs, reports | ✓ | ✓ | ✓ |
+| Triage alerts, manage incidents, add or download evidence | ✓ | ✓ | |
+| Run scans, upload logs, threat-intel lookups, Wazuh sync | ✓ | ✓ | |
+| Change scan scope, manage users, view the audit log | ✓ | | |
 
-- Every protected endpoint declares its required role through a FastAPI dependency, for example `Depends(require_role("analyst"))`.
-- **Hiding a button in the UI is never treated as access control.** The server checks every time.
+## 4. Scanning safety
 
-## 3. Network scanning safety (Phase 5)
+- **Default scope:** `192.168.56.0/24`. It's stored server-side and only admins can change it.
+- **Non-private ranges** (including carrier-grade NAT, `100.64.0.0/10`) need explicit `allow_public` confirmation.
+- **Targets:** IPs or CIDRs only (no hostnames), at most `/24`, and every address must be inside the scope. Multicast and reserved addresses are refused.
+- **Profiles:** preset only (`-sn`, `-sT --top-ports 100`, `-sT -sV --top-ports 1000`). There are no user-supplied flags.
+- **Limits:** one scan at a time. A per-host timeout and an overall timeout apply. Scans interrupted by a restart are marked failed.
+- **Audit:** every request is logged, including refused ones.
 
-1. **Authorized scope.** The default is `192.168.56.0/24` (VirtualBox host-only network). It's stored server-side, and only admins can change it.
-2. **Target validation.**
-   - Targets are parsed with Python's `ipaddress` module. Hostnames are not accepted, which prevents DNS tricks.
-   - Every address in a requested CIDR must fall inside the scope.
-   - The largest allowed range is `/24`.
-3. **Public addresses.** Any target where `ipaddress` reports `is_global` is refused unless an admin has explicitly added it to the scope.
-4. **No user-supplied flags.** Users pick a preset profile (`discovery`, `quick`, `service`), and the server maps it to a fixed argument list.
-5. **Execution.** Nmap runs with `subprocess.run([...], shell=False, timeout=...)`, using the path from `NMAP_PATH`. Output is XML on stdout, parsed with `defusedxml`.
-6. **Audit log.** Every request (user, target, profile, time, allowed or denied) is recorded, including rejected ones.
-7. **No admin-only scan types by default.** `-sS` and `-O` are not offered.
+## 5. Uploads
 
-## 4. File uploads (Phase 6)
+| Type | Limit | Allowed | Content check |
+|---|---|---|---|
+| Evidence | 20 MB | text, pcap, PNG, JPEG, PDF | magic bytes / UTF-8 |
+| Logs | 10 MB | `.log .txt .json .jsonl` | strict UTF-8, no NUL bytes |
+| Packet captures | 50 MB | `.pcap .pcapng .cap` | pcap/pcapng magic bytes |
 
-| Control | Implementation |
-|---|---|
-| Size limit | Logs **10 MB**, pcap **50 MB**. The stream is read in chunks and aborted when the limit is exceeded, so a large file is never fully loaded into memory. |
-| Type allowlist | Extensions `.log .txt .json .jsonl .pcap .pcapng` only |
-| Content validation | Text logs must decode as UTF-8 (with a small error tolerance) and contain no NUL bytes. Pcap files must start with valid magic bytes (`d4c3b2a1`, `a1b2c3d4`, `4d3cb2a1`, `a1b23c4d`, or pcapng `0a0d0d0a`). A mismatched extension is rejected. |
-| Filename handling | The original name is stored only as metadata (sanitized). Files on disk get a random UUID name, which prevents path traversal and overwrites. |
-| Storage location | `backend/data/uploads/` is outside any web-served folder and git-ignored. Files are never executed or served back directly. |
-| Integrity | A SHA-256 hash is computed at upload and stored, so the file can be used as incident evidence. |
-| Parsing safety | Parsers read line by line, enforce a maximum line length, and use regex patterns without catastrophic backtracking. TShark runs with `shell=False` and a timeout. |
-| Permissions | Uploading requires the `analyst` role or higher. |
+- Oversized requests are refused **before** the body is read (`Content-Length` check). Uploads also need a `Content-Length` header.
+- Files are streamed in 64 KB chunks and hashed with SHA-256. Rejected or partial files are deleted.
+- Stored names are random UUIDs under `backend/data/uploads/`. The user's filename is kept only as sanitised metadata, and path resolution refuses anything that escapes the folder.
+- Downloads use `Content-Type: application/octet-stream` plus `Content-Disposition: attachment`, so the browser never renders uploaded content.
 
-## 5. Secrets and configuration
+## 6. Web hardening
 
-- All secrets come from environment variables or `.env`, loaded with `pydantic-settings`. Examples: `SECRET_KEY`, `WAZUH_API_PASSWORD`, `ABUSEIPDB_API_KEY`.
-- `.env` is git-ignored. `.env.example` lists the variable names with empty values.
-- The app **refuses to start** if `SECRET_KEY` is missing or too short.
-- Secrets are never sent to the frontend, never logged, and are masked in the Settings UI.
-- Threat-intel lookups never send private or lab addresses (RFC 1918) to external services.
+- **Security headers:** `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, a strict API CSP (`default-src 'none'`), and `Cache-Control: no-store`.
+- **Body size:** JSON bodies over 1 MB are refused.
+- **Input validation:** Pydantic validates every request (types, lengths, enums, IP addresses). SQL is parameterised through the SQLAlchemy ORM, and `LIKE` searches escape `%` and `_`.
+- **Output:** React escapes output by default, and `dangerouslySetInnerHTML` is never used. External links use `rel="noopener noreferrer"`.
+- **Logging:** the audit logger strips control characters, which prevents log injection. Passwords, tokens and API keys are never logged.
+- **API docs:** `/docs` and `/openapi.json` are disabled when `APP_ENV=production`.
 
-## 6. General web security
+## 7. Security review (Phase 9)
 
-- **Input validation:** Pydantic schemas validate all request bodies, with types, lengths and enums.
-- **Database access:** SQLAlchemy ORM with parameterized queries, so no SQL is built from strings.
-- **Output encoding:** React escapes output by default. `dangerouslySetInnerHTML` is not used.
-- **Errors:** generic error responses. Stack traces only appear in server logs, and only in debug mode.
-- **CORS:** in development the frontend uses a Vite proxy, so requests are same-origin and CORS can stay locked down.
-- **Security headers:** `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, and a basic `Content-Security-Policy`.
-- **Dependencies:** audited with `npm audit` and `pip-audit` in Phase 9.
+The review method was:
+- a manual walk-through of every endpoint against the threat model above;
+- `ruff` with bandit security rules (`S`);
+- `pip-audit` and `npm audit`;
+- attack-style tests in `backend/tests/`.
 
-## 7. Honesty rules (data integrity)
+### Findings and fixes
 
-1. Never display fabricated detections. Empty means empty.
-2. Every alert records its `source` and, where applicable, the rule and evidence that produced it.
-3. Simulated data uses `source="demo"` and `is_simulated=true`, and always shows a **DEMO** badge.
-4. Integration status shows what is actually true ("Not configured", "Unreachable", "Connected") and is never optimistic.
-5. Threat-intel verdicts show the provider, query time and the provider's own confidence. They are opinions, not proof.
+| # | Finding | Risk | Fix |
+|---|---|---|---|
+| 1 | Users couldn't change their password, and admins couldn't reset one | Compromised or forgotten passwords stay in use | `POST /auth/change-password` (needs the current password; revokes other sessions) and `POST /users/{id}/reset-password` |
+| 2 | JSON request bodies had no size limit | Memory exhaustion (DoS) | 1 MB limit in middleware |
+| 3 | The login rate limiter's memory grew with every new username tried | Slow memory DoS | Expired entries are pruned once more than 10,000 keys exist |
+| 4 | The audit log had no viewer | Misuse goes unnoticed | Admin audit-log view with filters |
+| 5 | Scope rule used `is_global`, which let documentation and CGNAT ranges through without confirmation | Accidental out-of-lab scanning | Rule changed to "anything not private needs confirmation" (found by a test in Phase 5) |
+| 6 | XML entity attack produced a generic error | Confusing failure | Explicit `NmapError` ("possible XML attack") |
+
+### Automated checks (at the end of Phase 9)
+
+- `pytest`: 120 passed, plus 1 opt-in live-scan test (`RUN_NMAP_TESTS=1`), which also passed against this PC.
+- `ruff check .`: no findings, including the bandit `S` rules.
+- `pip-audit`: no known vulnerabilities.
+- `npm audit`: 0 vulnerabilities.
+
+### Accepted limitations
+
+These are acceptable for a single-user lab; production would need more.
+
+- Rate-limit counters live in memory. They reset on restart and aren't shared between processes.
+- Logout revokes **all** of a user's sessions, not just one.
+- There's no multi-factor authentication.
+- SQLite isn't encrypted at rest. Protect `backend/data/` and backups (`automation/bash/backup-db.sh`).
+- Evidence has no retention or deletion policy yet.
+- In production, serve the frontend behind a reverse proxy over HTTPS with its own Content-Security-Policy, and set `APP_ENV=production` and `COOKIE_SECURE=true`.
+- The Wazuh integration supports disabling TLS verification for the lab's self-signed certificate. The UI warns about this; prefer `WAZUH_CA_CERT`.

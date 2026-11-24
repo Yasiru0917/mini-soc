@@ -75,7 +75,9 @@ def start_scan(body: ScanRequest, request: Request, background: BackgroundTasks,
         raise HTTPException(status_code=status.HTTP_409_CONFLICT,
                             detail="Another scan is already running. Wait for it to finish.")
 
-    scan = Scan(target=str(target), profile=body.profile, requested_by_id=user.id)
+    # Show a single host as "192.168.56.1", not "192.168.56.1/32".
+    target_text = str(target.network_address) if target.num_addresses == 1 else str(target)
+    scan = Scan(target=target_text, profile=body.profile, requested_by_id=user.id)
     db.add(scan)
     db.commit()
     audit.record(db, action="scan.request", outcome="success", user=user, target=str(target),

@@ -48,3 +48,12 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
     role: Role | None = None
     is_active: bool | None = None
+
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=12, max_length=128)
+
+
+class PasswordReset(BaseModel):
+    new_password: str = Field(min_length=12, max_length=128)

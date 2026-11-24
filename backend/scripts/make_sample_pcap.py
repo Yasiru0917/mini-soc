@@ -15,11 +15,12 @@ Usage (backend folder):  python -m scripts.make_sample_pcap [output_path]
 import socket
 import struct
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 SCANNER, TARGET, RESOLVER = "203.0.113.50", "192.168.56.101", "192.168.56.1"
 MAC_A, MAC_B = bytes.fromhex("080027aaaaaa"), bytes.fromhex("080027bbbbbb")
-START = 1795593600  # 2026-11-24 00:00:00 UTC
+START = int(datetime(2026, 11, 24, tzinfo=UTC).timestamp())  # 2026-11-24 00:00:00 UTC
 
 
 def _checksum(data: bytes) -> int:

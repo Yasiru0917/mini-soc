@@ -84,7 +84,27 @@ export default function UserManagement() {
     },
     { key: 'last_login_at', label: 'Last login', render: (u) => formatDate(u.last_login_at) },
     { key: 'created_at', label: 'Created', render: (u) => formatDate(u.created_at) },
+    {
+      key: 'reset', label: '',
+      render: (u) => u.id !== me.id && (
+        <button type="button" className="text-xs text-soc-accent hover:underline" onClick={() => resetPassword(u)}>
+          Reset password
+        </button>
+      ),
+    },
   ]
+
+  async function resetPassword(u) {
+    const pw = window.prompt(`New password for ${u.username} (12+ characters). Share it with them securely.`)
+    if (!pw) return
+    setActionError(null)
+    try {
+      await apiFetch(`/users/${u.id}/reset-password`, { method: 'POST', body: { new_password: pw } })
+      window.alert(`Password for ${u.username} was reset. They have been signed out everywhere.`)
+    } catch (err) {
+      setActionError(err)
+    }
+  }
 
   return (
     <div className="space-y-6">

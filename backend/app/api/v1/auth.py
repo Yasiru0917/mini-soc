@@ -18,10 +18,10 @@ from sqlalchemy.orm import Session
 from app.api.deps import SESSION_COOKIE, client_ip, get_current_user
 from app.core.config import get_settings
 from app.core.rate_limit import LoginRateLimiter
-from app.core.security import create_access_token, verify_password
+from app.core.security import create_access_token, hash_password, verify_password
 from app.db.session import get_db, utcnow
 from app.models import User
-from app.schemas.user import LoginRequest, UserOut
+from app.schemas.user import LoginRequest, PasswordChange, UserOut
 from app.services import audit
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -100,3 +100,23 @@ def logout(request: Request, response: Response,
 def me(user: User = Depends(get_current_user)):
     """The frontend calls this to learn who is signed in (it can't read the cookie)."""
     return user
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+def change_password(body: PasswordChange, request: Request, response: Response,
+                    user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Self-service password change. Requires the CURRENT password, so someone
+    who finds an unlocked, signed-in browser can't lock the owner out."""
+    ip = client_ip(request)
+    if not verify_password(body.current_password, user.password_hash):
+        audit.record(db, action="auth.change_password", outcome="failure", user=user, client_ip=ip)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+    if body.new_password == body.current_password:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password must be different")
+    user.password_hash = hash_password(body.new_password)
+    user.token_version += 1  # sign out every other session
+    db.commit()
+    # Keep THIS browser signed in with a fresh token.
+    token, max_age = create_access_token(user.id, user.role.value, user.token_version)
+    _set_session_cookie(response, token, max_age)
+    audit.record(db, action="auth.change_password", outcome="success", user=user, client_ip=ip)

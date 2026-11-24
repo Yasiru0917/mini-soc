@@ -78,4 +78,32 @@ Try it first. If performance is unusable, the alternative is turning Hyper-V off
 
 - Default allowed scope: **`192.168.56.0/24`** (host-only network, reachable only from this PC and its VMs).
 - `192.168.56.1` is the Windows host itself.
-- Never scan your home LAN, a work or university network, or internet hosts without written permission. Mini SOC will refuse out-of-scope targets (Phase 5).
+- Never scan your home LAN, a work or university network, or internet hosts without written permission. Mini SOC refuses out-of-scope targets.
+
+## 7. Connecting Mini SOC to Wazuh
+
+Mini SOC talks to two Wazuh services:
+- the **server API** (`:55000`) for status and agents;
+- the **indexer** (`:9200`), where alerts are stored in `wazuh-alerts-*`.
+
+1. Find the VM's host-only IP, e.g. `192.168.56.105`.
+2. Create **dedicated, least-privilege** accounts rather than reusing `admin`:
+   - **Server API:** a user with a read-only role (Wazuh dashboard → *Server management → Security*).
+   - **Indexer:** a user that can only *read* `wazuh-alerts-*` (dashboard → *Indexer management → Security*).
+3. Copy the Wazuh root CA certificate from the VM to your PC, so TLS can be verified instead of switched off. On an all-in-one install it is typically `/etc/wazuh-indexer/certs/root-ca.pem`; check the path on your VM.
+4. Add the settings to `backend/.env`:
+   ```ini
+   WAZUH_API_URL=https://192.168.56.105:55000
+   WAZUH_API_USER=minisoc-api
+   WAZUH_API_PASSWORD=...
+   WAZUH_INDEXER_URL=https://192.168.56.105:9200
+   WAZUH_INDEXER_USER=minisoc-reader
+   WAZUH_INDEXER_PASSWORD=...
+   WAZUH_CA_CERT=C:\path\to\root-ca.pem
+   WAZUH_MIN_RULE_LEVEL=7
+   ```
+   If the certificate's name doesn't match the IP, `WAZUH_VERIFY_TLS=false` (with `WAZUH_CA_CERT` empty) works on this isolated lab network. The Settings page then shows a warning.
+5. Restart the backend. Then **Settings → Wazuh SIEM → Test connection**.
+6. Install a Wazuh agent on a lab VM (for example the target VM), generate events (such as failed SSH logins), and click **Sync alerts now**.
+
+> **Status:** the integration is implemented and tested against a *simulated* Wazuh server. It has not yet been verified against a real Wazuh VM. Do that once the VM exists, and record the result here.

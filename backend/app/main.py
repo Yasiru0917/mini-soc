@@ -22,6 +22,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 settings = get_settings()
 
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+MAX_JSON_BYTES = 1024 * 1024  # 1 MB is far more than any JSON request needs
 DOCS_PATHS = ("/docs", "/redoc", "/openapi.json")
 
 
@@ -54,13 +55,16 @@ async def upload_size_guard(request: Request, call_next):
     before our per-file checks could reject it - an easy way to fill the disk.
     Per-type limits (evidence/log/pcap) are enforced again while saving.
     """
+    length = request.headers.get("content-length")
     if "multipart/form-data" in request.headers.get("content-type", ""):
-        length = request.headers.get("content-length")
         if length is None:
             return JSONResponse(status_code=411, content={"detail": "Content-Length required for uploads"})
         limit = max(settings.max_pcap_bytes, settings.max_evidence_bytes, settings.max_log_bytes) + 1024 * 1024
         if not length.isdigit() or int(length) > limit:
             return JSONResponse(status_code=413, content={"detail": "Upload too large"})
+    elif length is not None and (not length.isdigit() or int(length) > MAX_JSON_BYTES):
+        # Security review fix: JSON bodies are small; refuse huge ones before parsing.
+        return JSONResponse(status_code=413, content={"detail": "Request body too large"})
     return await call_next(request)
 
 

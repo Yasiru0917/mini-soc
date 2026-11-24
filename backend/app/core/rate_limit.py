@@ -39,9 +39,17 @@ class LoginRateLimiter:
                     wait = max(wait, int(self.window_seconds - (now - attempts[0])) + 1)
             return wait
 
+    MAX_KEYS = 10_000
+
     def record_failure(self, *keys: str) -> None:
         now = time.monotonic()
         with self._lock:
+            # Security review fix: an attacker trying thousands of different
+            # usernames would otherwise grow this dict forever (memory DoS).
+            if len(self._failures) > self.MAX_KEYS:
+                for k in list(self._failures):
+                    if not self._prune(k, now):
+                        del self._failures[k]
             for key in keys:
                 self._prune(key, now).append(now)
 

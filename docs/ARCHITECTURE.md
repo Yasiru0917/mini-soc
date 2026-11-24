@@ -1,167 +1,169 @@
 # Mini SOC: Architecture
 
-> Status: Phase 3 complete (FastAPI backend, SQLite, authentication, RBAC, live dashboard). This document is updated at the end of every phase.
+> Status: all 9 phases complete. See [TESTING.md](TESTING.md) for how to run and verify each module.
 
 ## 1. Purpose
 
-Mini SOC is a web application for a small, **lab-only** Security Operations Center:
+Mini SOC is a web application for a small, **lab-only** Security Operations Center. It covers:
 
-- discover devices on an authorized network,
-- raise and triage security alerts,
-- investigate incidents,
-- analyse logs with transparent detection rules,
-- report on what happened.
+- discovering devices on an authorized network,
+- raising and triaging security alerts,
+- investigating incidents,
+- analysing logs and packet captures with transparent detection rules,
+- enriching indicators with threat intelligence,
+- reporting on what happened.
 
-It is a learning and portfolio project. The design rule that overrides everything else:
+The design rule that overrides everything else:
 
 > **No record may claim to be a detection unless a real detection mechanism produced it.**
 > Every alert stores *what* produced it, and simulated data is always flagged and visibly badged.
 
-## 2. Scope and priorities
-
-| Priority | Modules |
-|---|---|
-| **MVP** | Dashboard, Network Scanning (Nmap), Alerts, Incidents, Log Analysis |
-| Later | Wazuh integration, Threat Intelligence, Reports (PDF/CSV) |
-| Supporting | Authentication and RBAC, Settings, audit log |
-
-## 3. High-level design
+## 2. High-level design
 
 ```
-Browser ── React + Vite + Tailwind (SPA)
-   │  same-origin requests to /api/v1/...  (Vite dev proxy → FastAPI)
+Browser ── React 19 + Vite + Tailwind v4 (single-page app)
+   │  same-origin requests to /api/v1/...   (Vite proxy → FastAPI in development)
    ▼
-FastAPI
-   ├── api/v1 routers      HTTP only: parse, validate (Pydantic), authorize
-   ├── services            business logic (alerts, incidents, scans, uploads)
-   ├── detection           log parsers + rules (each rule maps to MITRE ATT&CK)
-   ├── integrations        plugin per external tool: nmap, tshark, wazuh, threatintel
-   └── models (SQLAlchemy) ──► SQLite (backend/data/soc.db)
+FastAPI (Python 3.13)
+   ├── middleware        upload/body size guard · Origin check (CSRF) · security headers
+   ├── api/v1 routers    HTTP only: validate (Pydantic), authenticate, authorize (RBAC)
+   ├── services          alerts/incidents logic, scans, log analysis, Wazuh sync, uploads, audit
+   ├── detection         parsers (auth / access / JSONL) + rules R-001…R-005
+   ├── integrations      nmap · tshark (R-006) · wazuh · threatintel (AbuseIPDB, VirusTotal, OTX)
+   ├── reports           PDF (ReportLab) · CSV (injection-safe)
+   └── models ──► SQLAlchemy 2 ──► SQLite (backend/data/soc.db), schema via Alembic
+                                     files: backend/data/uploads/{evidence,logs}/<uuid>
+
+External tools: Nmap (subprocess) · TShark (subprocess) · Wazuh server API :55000 + indexer :9200 (HTTPS)
+Lab network: VirtualBox host-only 192.168.56.0/24 (the default authorized scan scope)
 ```
 
 ### Why these layers?
 
 - **Routers** only deal with HTTP: "is this request valid, and is this user allowed to make it?".
-- **Services** contain the actual logic, so it can be tested without a web server.
-- **Models** describe the tables. Moving from SQLite to PostgreSQL later only changes the connection string.
-- **Integrations** share one small interface (`is_configured()`, `health_check()`, plus tool-specific actions). Adding a new tool means adding a folder, not editing the whole app.
+- **Services** hold the logic, so it can be tested without a web server.
+- **Integrations** each live in their own package and report an honest status (`available`, `not_configured`, `not_installed`, `unreachable`). Adding a new tool means adding a folder.
+- **Detection** is pure Python: `lines → events → rules → detections`. No database or HTTP is involved, so every rule is unit-tested directly.
 
-## 4. Technology decisions
+## 3. Technology decisions
 
 | Decision | Choice | Reason |
 |---|---|---|
-| Python version | 3.13 in a `.venv` | The system `python` command is 2.7; 3.14 is too new for some compiled wheels |
-| Frontend build | Vite 8 + React 19 | Fast dev server, standard tooling |
-| Styling | Tailwind CSS v4 (`@tailwindcss/vite`) | Design tokens live in `src/styles/index.css` (`@theme`); no `tailwind.config.js` |
-| Routing | React Router 7 | Real URLs for each module |
-| Icons | lucide-react | Consistent outline icon set |
-| Charts | Recharts, **added only when real data exists** (Phase 3/4) | Avoid unneeded dependencies |
-| Database | SQLite + SQLAlchemy 2 | Zero-install; easy to migrate later |
-| Nmap access | `subprocess` with argument list + XML output, parsed with `defusedxml` | No shell → no command injection; safe XML parsing |
-| PDF | ReportLab | Pure pip install on Windows (WeasyPrint needs GTK) |
-| Background jobs | FastAPI `BackgroundTasks` | Enough for a single-user lab; no Redis/Celery |
+| Python | 3.13 in `backend/.venv` | The system `python` command is 2.7; 3.14 is too new for some compiled wheels |
+| Frontend | Vite 8, React 19, React Router 7 | Fast tooling, real URLs per module |
+| Styling | Tailwind CSS v4 (`@theme` tokens in `src/styles/index.css`) | One place for the colour system |
+| Database | SQLite + SQLAlchemy 2 + Alembic | Zero install; migrations make schema changes safe |
+| Auth | Argon2id (`pwdlib`) + JWT (`PyJWT`) in an HttpOnly cookie | See [SECURITY.md](SECURITY.md) |
+| Nmap / TShark | `subprocess` with argument lists, no shell | Prevents command injection |
+| XML | `defusedxml` | Blocks XXE and "billion laughs" attacks in Nmap output |
+| HTTP client | `httpx` (with `MockTransport` in tests) | Wazuh and threat intel are tested without real servers |
+| PDF | ReportLab | Pure pip install on Windows |
+| Background work | FastAPI `BackgroundTasks` (scans), CLI loop (Wazuh sync) | Enough for one lab instance; no Redis or Celery |
+| Charts | Simple CSS bars | No chart library needed for the small amount of data |
 
-## 5. Frontend structure (Phase 2)
+## 4. Data provenance model
 
-```
-frontend/src/
-├── main.jsx            entry point; mounts <App/> inside <BrowserRouter>
-├── App.jsx             route table
-├── config/
-│   ├── navigation.js   single source of truth for menu items + their phase
-│   └── appConfig.js    display-only config (default scan scope)
-├── layouts/            AppLayout (shell), Sidebar, Topbar
-├── components/         PageHeader, Card, StatCard, DataTable, EmptyState,
-│                       PlaceholderNotice, Badges (Severity/Status/Demo/Planned)
-├── pages/              one file per module + Login + NotFound
-└── styles/index.css    Tailwind import + theme tokens + shared classes
-```
+Every `alert` row carries:
 
-UI conventions:
+| Field | Meaning | Examples |
+|---|---|---|
+| `source` | Mechanism that created it | `nmap`, `log_rule`, `pcap`, `wazuh`, `manual`, `demo` |
+| `detection_rule_id` | Rule that fired | `R-001`, `NMAP-RISKY-PORT`, `WZ-5712` |
+| `raw_reference` | Pointer back to the evidence | `upload:3:lines:4-11`, `scan:1`, `wazuh:<doc id>`, `manual:user:sara` |
+| `is_simulated` | `true` only for demo seed data | Purple **DEMO** badge in the UI |
+| `detected_at` | When the activity happened (log time), not when it was analysed | |
 
-- **Severity colours are only used for severity.** Red always means critical risk.
-- **A dash (—) is shown when no data source exists; 0 is not.** "0 alerts" claims that someone looked and found nothing.
-- **`PlaceholderNotice`** marks every unimplemented module with the phase that will deliver it.
-- **`DemoBadge`** (purple, a colour no severity uses) marks simulated records.
-- **Responsive design:** the sidebar is fixed at ≥1024px and becomes a drawer below that. Tables scroll inside their card, so the page never scrolls sideways.
+Further rules:
+- Analysts can create alerts manually, but the server **forces** `source="manual"`, so nobody can impersonate a detector.
+- Incidents built from demo alerts are themselves marked simulated (the "taint" rule).
+- Demo data comes only from `scripts/seed_demo_data.py`. It uses RFC 5737 documentation IP addresses, and `--remove` deletes it.
 
-## 6. Data provenance model (Phase 3+)
-
-Every `alert` and `event` row will carry:
-
-| Field | Meaning |
-|---|---|
-| `source` | `nmap` · `log_rule` · `pcap` · `wazuh` · `threat_intel` · `manual` · `demo` |
-| `is_simulated` | `true` only for demo seed data |
-| `detection_rule_id` | Rule that fired (for `log_rule`), e.g. `R-001` |
-| `raw_reference` | Pointer to the evidence: upload ID + line number, scan ID, or Wazuh alert ID |
-
-Demo data can only be created by `backend/scripts/seed_demo_data.py`. It sets `source="demo"` and `is_simulated=true`, and the dashboard can exclude it.
-
-## 7. Backend layout
-
-As built in Phase 3. Folders marked *(later)* arrive in the phase noted.
+## 5. Backend layout
 
 ```
 backend/
-├── .env.example        config template (copy to .env, which is git-ignored)
-├── requirements*.txt   pinned dependencies
-├── pyproject.toml      pytest + ruff (incl. bandit security rules) config
+├── alembic.ini, migrations/       schema migrations (applied automatically at start-up)
 ├── app/
-│   ├── main.py         app factory, security-header + origin-check middleware
-│   ├── core/           config.py (settings), security.py (Argon2, JWT),
-│   │                   rate_limit.py (login brute-force protection)
-│   ├── db/session.py   engine, sessions, UTCDateTime column type
-│   ├── models/         user, alert, incident, audit_log, enums
-│   ├── schemas/        Pydantic request/response models
-│   ├── api/
-│   │   ├── deps.py     get_current_user, require_role(...)
-│   │   ├── router.py   mounts everything under /api/v1
-│   │   └── v1/         health, auth, dashboard, users
-│   ├── services/       audit.py
-│   ├── detection/      (later: Phase 6)
-│   ├── integrations/   (later: Phases 5–8)
-│   └── reports/        (later: Phase 8)
-├── scripts/create_admin.py
-├── tests/              pytest: auth, RBAC, CSRF, headers, dashboard
-└── data/               (git-ignored) soc.db, later uploads/
+│   ├── main.py                    app + middleware
+│   ├── core/                      config (.env), security (Argon2, JWT), rate_limit
+│   ├── db/                        session (engine, UTCDateTime type), migrate (Alembic runner)
+│   ├── models/                    user, alert, incident(+note, evidence), network(scan, device, port,
+│   │                              app_setting), logs(upload, event), intel(ioc_lookup, report), audit_log
+│   ├── schemas/                   Pydantic request/response models
+│   ├── api/deps.py                get_current_user, require_role
+│   ├── api/v1/                    health, auth, users(+audit-log), dashboard, alerts, incidents,
+│   │                              network, logs, integrations, wazuh, threatintel, reports
+│   ├── services/                  audit, uploads, scans, log_analysis, wazuh_sync, settings_store
+│   ├── detection/                 events, parsers, rules
+│   ├── integrations/              base, nmap/, tshark/, wazuh/, threatintel/
+│   └── reports/                   pdf, csv_export
+├── scripts/                       create_admin, seed_demo_data, wazuh_sync, make_sample_pcap
+└── tests/                         120+ pytest tests (fixtures/ holds sample Nmap XML)
 ```
 
-### API endpoints (Phase 3)
+## 6. API overview (`/api/v1`)
 
-| Method | Path | Access | Purpose |
-|---|---|---|---|
-| GET | `/api/v1/health` | public | API + database status |
-| POST | `/api/v1/auth/login` | public (rate-limited) | Sign in, sets HttpOnly cookie |
-| POST | `/api/v1/auth/logout` | signed in | Revokes token, clears cookie |
-| GET | `/api/v1/auth/me` | signed in | Current user |
-| GET | `/api/v1/dashboard/summary` | viewer+ | Live alert/incident counts (`?include_simulated=`) |
-| GET | `/api/v1/users` | admin | List users |
-| POST | `/api/v1/users` | admin | Create user |
-| PATCH | `/api/v1/users/{id}` | admin | Change role / enable / disable |
+| Area | Endpoints | Minimum role |
+|---|---|---|
+| Health | `GET /health` | public |
+| Auth | `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`, `POST /auth/change-password` | public / signed in |
+| Users | `GET/POST /users`, `PATCH /users/{id}`, `POST /users/{id}/reset-password`, `GET /users/audit-log` | admin |
+| | `GET /users/assignable` | analyst |
+| Dashboard | `GET /dashboard/summary` | viewer |
+| Alerts | `GET /alerts`, `GET /alerts/{id}` | viewer |
+| | `POST /alerts`, `PATCH /alerts/{id}` | analyst |
+| Incidents | `GET /incidents`, `GET /incidents/{id}` | viewer |
+| | `POST /incidents`, `PATCH /incidents/{id}`, `POST/DELETE …/alerts`, `POST …/notes`, `POST …/evidence`, `GET /evidence/{id}/download` | analyst |
+| Network | `GET /settings/scan-scope`, `GET /scans/profiles`, `GET /scans`, `GET /scans/{id}`, `GET /devices` | viewer |
+| | `POST /scans` | analyst |
+| | `PUT /settings/scan-scope` | admin |
+| Logs | `GET /logs`, `GET /logs/{id}`, `GET /logs/{id}/events`, `GET /logs/rules` | viewer |
+| | `POST /logs/upload` | analyst |
+| Integrations | `GET /integrations/status`, `GET /wazuh/status`, `GET /wazuh/agents` | viewer |
+| | `POST /wazuh/sync` | analyst |
+| Threat intel | `GET /threat-intel/history` | viewer |
+| | `POST /threat-intel/lookup` | analyst |
+| Reports | `GET /reports`, `GET /reports/incidents/{id}.pdf`, `GET /reports/incidents/{id}.csv`, `GET /reports/alerts.csv` | viewer |
 
-Interactive docs: `http://127.0.0.1:8000/docs` (development only).
+Interactive documentation: `http://127.0.0.1:8000/docs` (development mode only).
 
-### Frontend additions (Phase 3)
+## 7. Frontend layout
 
-- `api/client.js`: fetch wrapper (same-origin cookies, readable errors, 401 → `auth:expired` event).
-- `auth/AuthContext.jsx`: who is signed in (via `/auth/me`), plus login, logout and `hasRole`.
-- `auth/RequireAuth.jsx`: route guard that redirects to `/login`.
-- `hooks/useApi.js`: loading/error/reload for GET requests.
-- Vite proxy: `/api` → `http://127.0.0.1:8000`, so the browser sees a single origin.
+```
+frontend/src/
+├── main.jsx, App.jsx          entry point + routes (all pages behind <RequireAuth>)
+├── api/client.js              fetch wrapper: same-origin cookies, readable errors, 401 → sign-in
+├── auth/                      AuthContext (who am I, login/logout, hasRole), RequireAuth
+├── hooks/                     useApi (loading/error/reload), useDebounce
+├── config/                    navigation (menu), workflow (allowed status changes)
+├── layouts/                   AppLayout, Sidebar (drawer on mobile), Topbar (live API health)
+├── components/                Card, DataTable, badges, Pagination, ErrorPanel, InfoNotice,
+│                              UserManagement, ChangePassword, AuditLog, ScopeEditor,
+│                              IntegrationStatus, WazuhPanel
+├── pages/                     Dashboard, Network, Alerts(+detail), Incidents(+detail),
+│                              Logs(+upload detail), ThreatIntel, Reports, Settings, Login, NotFound
+└── utils/                     format (dates, bytes, source labels), cidr (scope hint)
+```
+
+UI conventions:
+- Severity colours are used only for severity.
+- Empty data shows "—", never a misleading 0.
+- Demo data is always purple-badged.
+- Errors are shown, never hidden.
+- Tables scroll inside their card, so the page never scrolls sideways on phones.
 
 ## 8. Roadmap
 
 | Phase | Deliverable | Status |
 |---|---|---|
 | 1 | Environment check, architecture | ✅ |
-| 2 | Frontend shell, navigation, design system, docs | ✅ |
-| 3 | FastAPI + SQLite, auth (Argon2 + HttpOnly cookie JWT), RBAC, health check, dashboard API | ✅ |
-| 4 | Alerts and incidents (notes, evidence, resolution), demo seed script | ⏳ |
-| 5 | Nmap integration with scope enforcement and audit log | |
-| 6 | Secure uploads, log parsers, detection rules, TShark pcap summaries | |
-| 7 | Wazuh integration (lab VM) | |
-| 8 | Threat intelligence, PDF/CSV reports | |
-| 9 | Tests, security review, Alembic, final docs | |
+| 2 | Frontend shell, navigation, design system | ✅ |
+| 3 | FastAPI, SQLite, Argon2 + HttpOnly JWT auth, RBAC, live dashboard | ✅ |
+| 4 | Alerts, incidents, notes, evidence uploads, demo seed | ✅ |
+| 5 | Nmap scanning with server-enforced scope, inventory, exposure alerts | ✅ |
+| 6 | Log parsers, rules R-001…R-006, TShark pcap analysis | ✅ |
+| 7 | Wazuh integration, automation scripts | ✅ (tested against a simulated Wazuh) |
+| 8 | Threat intelligence, PDF/CSV reports | ✅ (tested against simulated providers) |
+| 9 | Alembic, security review and fixes, dependency audit, docs | ✅ |
 
-See also [SECURITY.md](SECURITY.md) and [LAB_SETUP.md](LAB_SETUP.md).
+Possible next steps: live Wazuh verification in the lab VM, scheduled scans, PostgreSQL, Sigma-rule import, and frontend unit tests (Vitest).

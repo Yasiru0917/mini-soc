@@ -66,12 +66,3 @@ export function DemoBadge() {
     </span>
   )
 }
-
-// "Planned" label for features listed in the UI but not yet built.
-export function PlannedBadge({ phase }) {
-  return (
-    <span className="inline-flex whitespace-nowrap rounded-md border border-amber-500/30 px-2 py-0.5 text-[11px] text-amber-300">
-      Planned · Phase {phase}
-    </span>
-  )
-}

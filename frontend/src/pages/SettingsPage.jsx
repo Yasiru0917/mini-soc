@@ -3,8 +3,10 @@
 // Role-based access control (RBAC): each user has ONE role, and each role
 // allows a fixed set of actions. The backend checks the role on every
 // request. Hiding a button in the UI is convenience, not security.
-import { ShieldCheck, Plug, Users, Check, Minus, UserCog, Radar } from 'lucide-react'
+import { ShieldCheck, Plug, Users, Check, Minus, UserCog, Radar, KeyRound, ScrollText } from 'lucide-react'
 import WazuhPanel from '../components/WazuhPanel.jsx'
+import ChangePassword from '../components/ChangePassword.jsx'
+import AuditLog from '../components/AuditLog.jsx'
 import PageHeader from '../components/PageHeader.jsx'
 import Card from '../components/Card.jsx'
 import UserManagement from '../components/UserManagement.jsx'
@@ -28,6 +30,10 @@ export default function SettingsPage() {
   return (
     <>
       <PageHeader title="Settings" description="Application, integration and access configuration." />
+
+      <Card title="My account" icon={KeyRound} className="mb-6">
+        <ChangePassword />
+      </Card>
 
       <Card title="User accounts" icon={UserCog} className="mb-6">
         {isAdmin ? (
@@ -84,6 +90,12 @@ export default function SettingsPage() {
           </table>
         </div>
       </Card>
+
+      {isAdmin && (
+        <Card title="Audit log" icon={ScrollText} className="mt-6">
+          <AuditLog />
+        </Card>
+      )}
     </>
   )
 }

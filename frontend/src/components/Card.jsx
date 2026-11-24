@@ -1,7 +1,9 @@
 // Generic panel with an optional title row.
 export default function Card({ title, icon: Icon, actions, className = '', children }) {
   return (
-    <section className={`card ${className}`}>
+    // min-w-0: inside CSS grids, let the card shrink so wide tables scroll
+    // inside it instead of stretching the whole page on phones.
+    <section className={`card min-w-0 ${className}`}>
       {(title || actions) && (
         <div className="flex items-center justify-between gap-3 border-b border-soc-border px-5 py-3">
           <h2 className="card-title flex items-center gap-2">
