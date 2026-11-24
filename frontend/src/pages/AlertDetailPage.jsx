@@ -58,7 +58,12 @@ export default function AlertDetailPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         <Card title="Details" icon={Info} className="lg:col-span-2">
           <dl className="grid gap-4 sm:grid-cols-2">
-            <Field label="Source IP"><code className="font-mono">{alert.src_ip}</code></Field>
+            <Field label="Source IP">
+              <code className="font-mono">{alert.src_ip}</code>
+              {alert.src_ip && hasRole('analyst') && (
+                <Link className="ml-2 text-xs text-soc-accent" to={`/threat-intel?q=${encodeURIComponent(alert.src_ip)}`}>Check reputation →</Link>
+              )}
+            </Field>
             <Field label="Destination IP"><code className="font-mono">{alert.dst_ip}</code></Field>
             <Field label="Detected at">{formatDate(alert.detected_at)}</Field>
             <Field label="Last updated">{formatDate(alert.updated_at)}</Field>

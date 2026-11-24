@@ -2,7 +2,20 @@
 
 from fastapi import APIRouter
 
-from app.api.v1 import alerts, auth, dashboard, health, incidents, integrations, logs, network, users, wazuh
+from app.api.v1 import (
+    alerts,
+    auth,
+    dashboard,
+    health,
+    incidents,
+    integrations,
+    logs,
+    network,
+    reports,
+    threatintel,
+    users,
+    wazuh,
+)
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(health.router)
@@ -17,3 +30,5 @@ api_router.include_router(network.router)
 api_router.include_router(integrations.router)
 api_router.include_router(logs.router)
 api_router.include_router(wazuh.router)
+api_router.include_router(threatintel.router)
+api_router.include_router(reports.router)
