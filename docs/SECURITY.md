@@ -16,7 +16,14 @@ This document records the security decisions for the application **before** they
 | Secrets | Leaking API keys via git | `.env` only (git-ignored); `.env.example` has no values |
 | Analysts | Trusting fake data | Provenance fields + DEMO badge; no invented detections |
 
-## 2. Authentication (Phase 3)
+## 2. Authentication (implemented in Phase 3)
+
+Covered by automated tests in `backend/tests/` (24 tests): hashing, cookie flags, generic errors, rate limiting, forged and `alg=none` tokens, logout revocation, role enforcement, immediate demotion, cross-site origin blocking, security headers, and audit-log injection.
+
+Known limitations (accepted for a single-instance lab app):
+- Login failure counters are kept in memory. They reset when the server restarts and aren't shared between multiple server processes.
+- Logout increments `token_version`, which signs the user out of **all** their sessions, not just the current browser.
+- The client IP comes from `X-Forwarded-For` only when the request arrives from the local Vite proxy (127.0.0.1). This is uvicorn's default trusted-proxy behaviour.
 
 ### Passwords
 - Passwords are hashed with **Argon2id** (`pwdlib[argon2]`). Argon2 is deliberately slow and memory-hard, which makes offline cracking expensive. Plain passwords are never stored or logged.

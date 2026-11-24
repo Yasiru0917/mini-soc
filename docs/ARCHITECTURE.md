@@ -1,6 +1,6 @@
 # Mini SOC: Architecture
 
-> Status: Phase 2 complete (frontend shell). This document is updated at the end of every phase.
+> Status: Phase 3 complete (FastAPI backend, SQLite, authentication, RBAC, live dashboard). This document is updated at the end of every phase.
 
 ## 1. Purpose
 
@@ -98,26 +98,57 @@ Every `alert` and `event` row will carry:
 
 Demo data can only be created by `backend/scripts/seed_demo_data.py`. It sets `source="demo"` and `is_simulated=true`, and the dashboard can exclude it.
 
-## 7. Planned backend layout (Phase 3)
+## 7. Backend layout
+
+As built in Phase 3. Folders marked *(later)* arrive in the phase noted.
 
 ```
 backend/
+├── .env.example        config template (copy to .env, which is git-ignored)
+├── requirements*.txt   pinned dependencies
+├── pyproject.toml      pytest + ruff (incl. bandit security rules) config
 ├── app/
-│   ├── main.py
-│   ├── core/          config.py, security.py, logging.py
-│   ├── db/            session.py, base.py
-│   ├── models/        user, device, scan, alert, incident, note, evidence,
-│   │                  log_upload, log_event, ioc_lookup, audit_log, setting
-│   ├── schemas/       Pydantic request/response models
-│   ├── api/v1/        auth, dashboard, devices, scans, alerts, incidents, logs, settings
-│   ├── services/
-│   ├── detection/     parsers/, rules/
-│   ├── integrations/  base.py, nmap/, tshark/, wazuh/, threatintel/
-│   └── reports/
-├── scripts/           create_admin.py, seed_demo_data.py
-├── tests/             pytest + sample log fixtures
-└── data/              (git-ignored) soc.db, uploads/
+│   ├── main.py         app factory, security-header + origin-check middleware
+│   ├── core/           config.py (settings), security.py (Argon2, JWT),
+│   │                   rate_limit.py (login brute-force protection)
+│   ├── db/session.py   engine, sessions, UTCDateTime column type
+│   ├── models/         user, alert, incident, audit_log, enums
+│   ├── schemas/        Pydantic request/response models
+│   ├── api/
+│   │   ├── deps.py     get_current_user, require_role(...)
+│   │   ├── router.py   mounts everything under /api/v1
+│   │   └── v1/         health, auth, dashboard, users
+│   ├── services/       audit.py
+│   ├── detection/      (later: Phase 6)
+│   ├── integrations/   (later: Phases 5–8)
+│   └── reports/        (later: Phase 8)
+├── scripts/create_admin.py
+├── tests/              pytest: auth, RBAC, CSRF, headers, dashboard
+└── data/               (git-ignored) soc.db, later uploads/
 ```
+
+### API endpoints (Phase 3)
+
+| Method | Path | Access | Purpose |
+|---|---|---|---|
+| GET | `/api/v1/health` | public | API + database status |
+| POST | `/api/v1/auth/login` | public (rate-limited) | Sign in, sets HttpOnly cookie |
+| POST | `/api/v1/auth/logout` | signed in | Revokes token, clears cookie |
+| GET | `/api/v1/auth/me` | signed in | Current user |
+| GET | `/api/v1/dashboard/summary` | viewer+ | Live alert/incident counts (`?include_simulated=`) |
+| GET | `/api/v1/users` | admin | List users |
+| POST | `/api/v1/users` | admin | Create user |
+| PATCH | `/api/v1/users/{id}` | admin | Change role / enable / disable |
+
+Interactive docs: `http://127.0.0.1:8000/docs` (development only).
+
+### Frontend additions (Phase 3)
+
+- `api/client.js`: fetch wrapper (same-origin cookies, readable errors, 401 → `auth:expired` event).
+- `auth/AuthContext.jsx`: who is signed in (via `/auth/me`), plus login, logout and `hasRole`.
+- `auth/RequireAuth.jsx`: route guard that redirects to `/login`.
+- `hooks/useApi.js`: loading/error/reload for GET requests.
+- Vite proxy: `/api` → `http://127.0.0.1:8000`, so the browser sees a single origin.
 
 ## 8. Roadmap
 
@@ -125,8 +156,8 @@ backend/
 |---|---|---|
 | 1 | Environment check, architecture | ✅ |
 | 2 | Frontend shell, navigation, design system, docs | ✅ |
-| 3 | FastAPI + SQLite, auth (Argon2 + HttpOnly cookie JWT), RBAC, health check, dashboard API | ⏳ |
-| 4 | Alerts and incidents (notes, evidence, resolution), demo seed script | |
+| 3 | FastAPI + SQLite, auth (Argon2 + HttpOnly cookie JWT), RBAC, health check, dashboard API | ✅ |
+| 4 | Alerts and incidents (notes, evidence, resolution), demo seed script | ⏳ |
 | 5 | Nmap integration with scope enforcement and audit log | |
 | 6 | Secure uploads, log parsers, detection rules, TShark pcap summaries | |
 | 7 | Wazuh integration (lab VM) | |

@@ -4,10 +4,11 @@
 // top bar once and renders the current page in its <Outlet />.
 // The login page sits outside the layout because it has no sidebar.
 //
-// Phase 3 will wrap the nested routes in an auth guard so that only
-// signed-in users can reach them (and the backend will enforce roles).
+// <RequireAuth> wraps the layout, so every page inside it needs a signed-in
+// user. (The backend independently enforces login and roles on every API call.)
 import { Routes, Route } from 'react-router-dom'
 import AppLayout from './layouts/AppLayout.jsx'
+import RequireAuth from './auth/RequireAuth.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
 import NetworkPage from './pages/NetworkPage.jsx'
 import AlertsPage from './pages/AlertsPage.jsx'
@@ -23,7 +24,13 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
-      <Route element={<AppLayout />}>
+      <Route
+        element={
+          <RequireAuth>
+            <AppLayout />
+          </RequireAuth>
+        }
+      >
         <Route index element={<DashboardPage />} />
         <Route path="network" element={<NetworkPage />} />
         <Route path="alerts" element={<AlertsPage />} />

@@ -3,12 +3,14 @@
 // Role-based access control (RBAC): each user has ONE role, and each role
 // allows a fixed set of actions. The backend checks the role on every
 // request (Phase 3). Hiding a button in the UI is convenience, not security.
-import { ShieldCheck, Plug, Users, Check, Minus } from 'lucide-react'
+import { ShieldCheck, Plug, Users, Check, Minus, UserCog } from 'lucide-react'
 import PageHeader from '../components/PageHeader.jsx'
 import PlaceholderNotice from '../components/PlaceholderNotice.jsx'
 import Card from '../components/Card.jsx'
+import UserManagement from '../components/UserManagement.jsx'
 import { PlannedBadge } from '../components/Badges.jsx'
 import { DEFAULT_SCAN_SCOPE } from '../config/appConfig.js'
+import { useAuth } from '../auth/AuthContext.jsx'
 
 const INTEGRATIONS = [
   { name: 'Nmap', purpose: 'Network discovery and port scanning', phase: 5 },
@@ -27,12 +29,26 @@ const PERMISSIONS = [
 ]
 
 export default function SettingsPage() {
+  const { hasRole } = useAuth()
+  const isAdmin = hasRole('admin')
+
   return (
     <>
       <PageHeader title="Settings" description="Application, integration and access configuration." />
 
-      <PlaceholderNotice phase={3}>
-        Settings are read-only. Saving configuration and managing users require the backend.
+      <Card title="User accounts" icon={UserCog} className="mb-6">
+        {isAdmin ? (
+          <UserManagement />
+        ) : (
+          <p className="text-sm text-soc-muted">
+            Only administrators can manage user accounts. Ask an admin if you need a different role.
+          </p>
+        )}
+      </Card>
+
+      <PlaceholderNotice phase="5–8">
+        The scan scope becomes editable in Phase 5 and integrations are connected in Phases 5–8.
+        The values below are read-only.
       </PlaceholderNotice>
 
       <div className="grid gap-6 lg:grid-cols-2">

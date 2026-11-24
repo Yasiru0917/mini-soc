@@ -1,56 +1,110 @@
 // SOC Dashboard - the analyst's overview.
 //
-// Phase 2: layout only. Every metric shows "-" (no data source), not 0,
-// because there is no backend to count anything yet.
-// Phase 3/4: values will come from GET /api/v1/dashboard/summary.
-import { Activity, Briefcase, Radio, Fingerprint } from 'lucide-react'
+// Phase 3: alert and incident numbers are LIVE counts from the database via
+// GET /api/v1/dashboard/summary. They are real zeros until detection
+// sources exist (Phase 4+). Network activity is still a placeholder (Phase 5).
+import { useState } from 'react'
+import { Activity, Briefcase, Radio, Fingerprint, RotateCw } from 'lucide-react'
 import PageHeader from '../components/PageHeader.jsx'
-import PlaceholderNotice from '../components/PlaceholderNotice.jsx'
+import InfoNotice from '../components/InfoNotice.jsx'
+import ErrorPanel from '../components/ErrorPanel.jsx'
 import StatCard from '../components/StatCard.jsx'
 import Card from '../components/Card.jsx'
+import DataTable from '../components/DataTable.jsx'
 import EmptyState from '../components/EmptyState.jsx'
-import { DemoBadge, STATUSES } from '../components/Badges.jsx'
+import { DemoBadge, SeverityBadge, StatusBadge, STATUSES } from '../components/Badges.jsx'
+import { useApi } from '../hooks/useApi.js'
 
-// Each record will say which mechanism produced it. Shown here so the
-// dashboard explains its own data rules.
+// Each record says which mechanism produced it.
 const DATA_SOURCES = [
+  { id: 'manual', label: 'Analyst (manual entry)', phase: 4 },
   { id: 'nmap', label: 'Nmap scan', phase: 5 },
   { id: 'log_rule', label: 'Log detection rule', phase: 6 },
   { id: 'pcap', label: 'Packet capture (TShark)', phase: 6 },
   { id: 'wazuh', label: 'Wazuh SIEM', phase: 7 },
   { id: 'threat_intel', label: 'Threat intelligence', phase: 8 },
-  { id: 'manual', label: 'Analyst (manual entry)', phase: 4 },
+]
+
+const RECENT_COLUMNS = [
+  { key: 'severity', label: 'Severity', render: (a) => <SeverityBadge severity={a.severity} /> },
+  {
+    key: 'title',
+    label: 'Alert',
+    render: (a) => (
+      <span className="flex items-center gap-2">
+        {a.title} {a.is_simulated && <DemoBadge />}
+      </span>
+    ),
+  },
+  { key: 'src', label: 'Source → Destination', render: (a) => <code className="font-mono text-xs">{a.src_ip ?? '?'} → {a.dst_ip ?? '?'}</code> },
+  { key: 'source', label: 'Detected by' },
+  { key: 'status', label: 'Status', render: (a) => <StatusBadge status={a.status} /> },
+  { key: 'detected_at', label: 'Time', render: (a) => new Date(a.detected_at).toLocaleString() },
 ]
 
 export default function DashboardPage() {
+  const [includeDemo, setIncludeDemo] = useState(true)
+  const { data, error, loading, reload } = useApi(`/dashboard/summary?include_simulated=${includeDemo}`)
+
+  // While loading (or on error) show "-" rather than a misleading number.
+  const sev = data?.alerts.by_severity
+  const hint = loading ? 'Loading…' : data ? 'Stored in database' : undefined
+
   return (
     <>
       <PageHeader
         title="SOC Dashboard"
         description="Overview of alerts, incidents and network activity across the lab environment."
+        actions={
+          <>
+            <label className="btn-secondary cursor-pointer select-none">
+              <input
+                type="checkbox"
+                className="accent-[var(--color-demo)]"
+                checked={includeDemo}
+                onChange={(e) => setIncludeDemo(e.target.checked)}
+              />
+              Include demo data
+            </label>
+            <button type="button" className="btn-secondary" onClick={reload} disabled={loading} aria-label="Refresh">
+              <RotateCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+            </button>
+          </>
+        }
       />
 
-      <PlaceholderNotice phase="3–4">
-        The backend and database do not exist yet, so no metrics are shown. A dash (—) means
-        "no data source", not "zero alerts".
-      </PlaceholderNotice>
+      {error ? (
+        <ErrorPanel error={error} onRetry={reload} />
+      ) : (
+        <InfoNotice title="Live data">
+          Counts come straight from the database. No detection source is connected yet, so they
+          stay at zero until alerts are created (manual entry in Phase 4, Nmap in Phase 5, log
+          rules in Phase 6, Wazuh in Phase 7).
+        </InfoNotice>
+      )}
 
-      {/* Alert counts by severity */}
       <section aria-label="Alert metrics" className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
-        <StatCard label="Total alerts" value={null} />
-        <StatCard label="Critical" value={null} accentClass="bg-sev-critical" />
-        <StatCard label="High" value={null} accentClass="bg-sev-high" />
-        <StatCard label="Medium" value={null} accentClass="bg-sev-medium" />
-        <StatCard label="Low" value={null} accentClass="bg-sev-low" />
-        <StatCard label="Open incidents" value={null} accentClass="bg-soc-muted" />
+        <StatCard label="Total alerts" value={data?.alerts.total} hint={data?.alerts.simulated ? `${data.alerts.simulated} demo` : hint} />
+        <StatCard label="Critical" value={sev?.critical} hint={hint} accentClass="bg-sev-critical" />
+        <StatCard label="High" value={sev?.high} hint={hint} accentClass="bg-sev-high" />
+        <StatCard label="Medium" value={sev?.medium} hint={hint} accentClass="bg-sev-medium" />
+        <StatCard label="Low" value={sev?.low} hint={hint} accentClass="bg-sev-low" />
+        <StatCard label="Open incidents" value={data?.incidents.open} hint={hint} accentClass="bg-soc-muted" />
       </section>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <Card title="Recent security events" icon={Activity} className="lg:col-span-2">
-          <EmptyState icon={Activity} title="No events to display">
-            Events will appear here only when a real detection source (scan, log rule, Wazuh)
-            or a clearly-marked demo record creates them.
-          </EmptyState>
+          <DataTable
+            caption="Recent alerts"
+            columns={RECENT_COLUMNS}
+            rows={data?.recent_alerts ?? []}
+            empty={
+              <EmptyState icon={Activity} title={loading ? 'Loading…' : 'No alerts recorded'}>
+                Alerts appear here only when a real detection source or an analyst creates them.
+                Demo records are always marked <DemoBadge />.
+              </EmptyState>
+            }
+          />
         </Card>
 
         <Card title="Incident statistics" icon={Briefcase}>
@@ -58,16 +112,20 @@ export default function DashboardPage() {
             {STATUSES.map((s) => (
               <li key={s.id} className="flex items-center justify-between">
                 <span className="text-soc-muted">{s.label}</span>
-                <span className="font-mono">—</span>
+                <span className="font-mono">{data?.incidents.by_status[s.id] ?? '—'}</span>
               </li>
             ))}
+            <li className="flex items-center justify-between border-t border-soc-border pt-2 font-medium">
+              <span>Total</span>
+              <span className="font-mono">{data?.incidents.total ?? '—'}</span>
+            </li>
           </ul>
         </Card>
 
         <Card title="Network activity overview" icon={Radio} className="lg:col-span-2">
-          <EmptyState icon={Radio} title="No network data yet">
-            Device and service counts come from authorized Nmap scans (Phase 5). Traffic
-            summaries come from uploaded packet captures (Phase 6).
+          <EmptyState icon={Radio} title="Not implemented yet · Phase 5">
+            Device and service counts will come from authorized Nmap scans (Phase 5), and traffic
+            summaries from uploaded packet captures (Phase 6).
           </EmptyState>
         </Card>
 

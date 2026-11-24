@@ -1,0 +1,8 @@
+# Runtime dependencies for the Mini SOC backend (Python 3.13).
+# Pinned to the exact versions tested, so every install behaves the same.
+fastapi==0.165.0            # web framework (routing, validation, OpenAPI docs)
+uvicorn[standard]==0.54.0   # ASGI server that runs the app
+SQLAlchemy==2.1.9           # database models and queries (ORM)
+pydantic-settings==2.16.3   # typed settings loaded from .env / environment
+PyJWT==2.15.1               # signs and verifies session tokens (JWT)
+pwdlib[argon2]==0.4.2       # Argon2id password hashing
