@@ -14,6 +14,8 @@ from app import __version__
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.db.migrate import upgrade_database
+from app.db.session import SessionLocal
+from app.services.scans import fail_interrupted_scans
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -27,6 +29,8 @@ DOCS_PATHS = ("/docs", "/redoc", "/openapi.json")
 async def lifespan(_app: FastAPI):
     # Make sure the database schema is current before serving requests.
     upgrade_database()
+    with SessionLocal() as db:
+        fail_interrupted_scans(db)
     yield
 
 

@@ -4,7 +4,7 @@
 // Analysts review alerts, change their status, and escalate related alerts
 // into an incident. Every alert shows WHAT produced it ("Detected by").
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Bell, Filter, Gauge, Plus, Briefcase, X } from 'lucide-react'
 import PageHeader from '../components/PageHeader.jsx'
 import Card from '../components/Card.jsx'
@@ -85,7 +85,15 @@ export default function AlertsPage() {
   const canEdit = hasRole('analyst')
   const navigate = useNavigate()
 
-  const [filters, setFilters] = useState({ q: '', severity: '', status: '', source: '', include_simulated: true })
+  // Filters can be pre-set from the URL, e.g. /alerts?source=nmap (linked from scans).
+  const [searchParams] = useSearchParams()
+  const [filters, setFilters] = useState({
+    q: searchParams.get('q') ?? '',
+    severity: searchParams.get('severity') ?? '',
+    status: searchParams.get('status') ?? '',
+    source: searchParams.get('source') ?? '',
+    include_simulated: true,
+  })
   const [offset, setOffset] = useState(0)
   const [selected, setSelected] = useState(new Set())
   const [showNew, setShowNew] = useState(false)

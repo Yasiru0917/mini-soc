@@ -5,15 +5,17 @@ sources exist (Phases 4-7) the counts will legitimately be zero.
 Demo records are counted separately so they can be shown or excluded.
 """
 
+from datetime import timedelta
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_role
 from app.db.session import get_db, utcnow
-from app.models import Alert, Incident, User
+from app.models import Alert, Device, DevicePort, Incident, Scan, User
 from app.models.enums import OPEN_INCIDENT_STATUSES, IncidentStatus, Role, Severity
-from app.schemas.dashboard import AlertCounts, DashboardSummary, IncidentCounts, RecentAlert
+from app.schemas.dashboard import AlertCounts, DashboardSummary, IncidentCounts, NetworkCounts, RecentAlert
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -44,17 +46,32 @@ def summary(
         select(Alert).where(*alert_filter).order_by(Alert.detected_at.desc()).limit(10)
     ).all()
 
+    by_source = dict(db.execute(
+        select(Alert.source, func.count()).where(*alert_filter).group_by(Alert.source)
+    ).all())
+
+    day_ago = utcnow() - timedelta(hours=24)
+    network = NetworkCounts(
+        devices=db.scalar(select(func.count()).select_from(Device)) or 0,
+        devices_up_24h=db.scalar(select(func.count()).select_from(Device).where(Device.last_seen >= day_ago)) or 0,
+        open_ports=db.scalar(select(func.count()).select_from(DevicePort).where(DevicePort.state == "open")) or 0,
+        scans_completed=db.scalar(select(func.count()).select_from(Scan).where(Scan.status == "completed")) or 0,
+        last_scan_at=db.scalar(select(func.max(Scan.finished_at)).where(Scan.status == "completed")),
+    )
+
     return DashboardSummary(
         alerts=AlertCounts(
             total=sum(by_severity.values()),
             by_severity=by_severity,
             simulated=simulated if include_simulated else 0,
         ),
+        alerts_by_source={str(k): v for k, v in by_source.items()},
         incidents=IncidentCounts(
             total=sum(by_status.values()),
             open=sum(by_status[s] for s in OPEN_INCIDENT_STATUSES),
             by_status=by_status,
         ),
+        network=network,
         recent_alerts=[RecentAlert.model_validate(a) for a in recent],
         includes_simulated=include_simulated,
         generated_at=utcnow(),

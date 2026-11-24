@@ -33,9 +33,19 @@ class RecentAlert(BaseModel):
     detected_at: datetime
 
 
+class NetworkCounts(BaseModel):
+    devices: int
+    devices_up_24h: int
+    open_ports: int
+    scans_completed: int
+    last_scan_at: datetime | None
+
+
 class DashboardSummary(BaseModel):
     alerts: AlertCounts
+    alerts_by_source: dict[str, int]
     incidents: IncidentCounts
+    network: NetworkCounts
     recent_alerts: list[RecentAlert]
     includes_simulated: bool
     generated_at: datetime

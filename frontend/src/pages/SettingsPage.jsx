@@ -1,30 +1,22 @@
-// Settings - scan scope, integrations, users and roles.
+// Settings - users, scan scope, integrations, roles.
 //
 // Role-based access control (RBAC): each user has ONE role, and each role
 // allows a fixed set of actions. The backend checks the role on every
-// request (Phase 3). Hiding a button in the UI is convenience, not security.
+// request. Hiding a button in the UI is convenience, not security.
 import { ShieldCheck, Plug, Users, Check, Minus, UserCog } from 'lucide-react'
 import PageHeader from '../components/PageHeader.jsx'
-import PlaceholderNotice from '../components/PlaceholderNotice.jsx'
 import Card from '../components/Card.jsx'
 import UserManagement from '../components/UserManagement.jsx'
-import { PlannedBadge } from '../components/Badges.jsx'
-import { DEFAULT_SCAN_SCOPE } from '../config/appConfig.js'
+import ScopeEditor from '../components/ScopeEditor.jsx'
+import IntegrationStatus from '../components/IntegrationStatus.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
-
-const INTEGRATIONS = [
-  { name: 'Nmap', purpose: 'Network discovery and port scanning', phase: 5 },
-  { name: 'TShark (Wireshark)', purpose: 'Packet capture analysis', phase: 6 },
-  { name: 'Wazuh', purpose: 'SIEM alerts from monitored endpoints', phase: 7 },
-  { name: 'Threat intelligence APIs', purpose: 'AbuseIPDB, VirusTotal, OTX', phase: 8 },
-]
 
 const ROLES = ['Admin', 'Analyst', 'Viewer']
 const PERMISSIONS = [
-  { action: 'View dashboard, alerts, incidents', allowed: [true, true, true] },
-  { action: 'Triage alerts, manage incidents', allowed: [true, true, false] },
-  { action: 'Upload logs, run authorized scans', allowed: [true, true, false] },
-  { action: 'Change scan scope and integrations', allowed: [true, false, false] },
+  { action: 'View dashboard, alerts, incidents, scans', allowed: [true, true, true] },
+  { action: 'Triage alerts, manage incidents, add evidence', allowed: [true, true, false] },
+  { action: 'Upload logs, run authorized scans, threat-intel lookups', allowed: [true, true, false] },
+  { action: 'Change scan scope', allowed: [true, false, false] },
   { action: 'Manage users and roles', allowed: [true, false, false] },
 ]
 
@@ -46,33 +38,17 @@ export default function SettingsPage() {
         )}
       </Card>
 
-      <PlaceholderNotice phase="5–8">
-        The scan scope becomes editable in Phase 5 and integrations are connected in Phases 5–8.
-        The values below are read-only.
-      </PlaceholderNotice>
-
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Authorized scan scope" icon={ShieldCheck}>
-          <label htmlFor="scope" className="label">Allowed networks (CIDR)</label>
-          <input id="scope" className="input font-mono" value={DEFAULT_SCAN_SCOPE} readOnly disabled />
-          <p className="mt-2 text-xs text-soc-muted">
-            Default: VirtualBox host-only network. Only add networks you own or have written
-            permission to test.
-          </p>
+          <ScopeEditor />
         </Card>
 
         <Card title="Integrations" icon={Plug}>
-          <ul className="divide-y divide-soc-border">
-            {INTEGRATIONS.map((i) => (
-              <li key={i.name} className="flex items-center justify-between gap-3 py-2.5">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">{i.name}</p>
-                  <p className="text-xs text-soc-muted">{i.purpose}</p>
-                </div>
-                <PlannedBadge phase={i.phase} />
-              </li>
-            ))}
-          </ul>
+          <IntegrationStatus />
+          <p className="mt-3 text-xs text-soc-muted">
+            Integration credentials and API keys are read from <code className="font-mono">backend/.env</code> on the
+            server. They are never sent to the browser.
+          </p>
         </Card>
       </div>
 

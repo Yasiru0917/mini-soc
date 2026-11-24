@@ -4,7 +4,9 @@
 // GET /api/v1/dashboard/summary. They are real zeros until detection
 // sources exist (Phase 4+). Network activity is still a placeholder (Phase 5).
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Activity, Briefcase, Radio, Fingerprint, RotateCw } from 'lucide-react'
+import { SOURCE_LABELS } from '../utils/format.js'
 import PageHeader from '../components/PageHeader.jsx'
 import InfoNotice from '../components/InfoNotice.jsx'
 import ErrorPanel from '../components/ErrorPanel.jsx'
@@ -77,9 +79,9 @@ export default function DashboardPage() {
         <ErrorPanel error={error} onRetry={reload} />
       ) : (
         <InfoNotice title="Live data">
-          Counts come straight from the database. No detection source is connected yet, so they
-          stay at zero until alerts are created (manual entry in Phase 4, Nmap in Phase 5, log
-          rules in Phase 6, Wazuh in Phase 7).
+          Every number comes straight from the database. Alerts only exist when a detection source
+          (Nmap scan, log rule, packet capture, Wazuh) or an analyst created them. Demo records are
+          counted only while "Include demo data" is on.
         </InfoNotice>
       )}
 
@@ -122,11 +124,40 @@ export default function DashboardPage() {
           </ul>
         </Card>
 
-        <Card title="Network activity overview" icon={Radio} className="lg:col-span-2">
-          <EmptyState icon={Radio} title="Not implemented yet · Phase 5">
-            Device and service counts will come from authorized Nmap scans (Phase 5), and traffic
-            summaries from uploaded packet captures (Phase 6).
-          </EmptyState>
+        <Card title="Network activity overview" icon={Radio} className="lg:col-span-2"
+          actions={<Link to="/network" className="text-xs text-soc-accent">Network scanning →</Link>}>
+          <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {[
+              ['Known devices', data?.network.devices],
+              ['Seen in last 24h', data?.network.devices_up_24h],
+              ['Open ports', data?.network.open_ports],
+              ['Completed scans', data?.network.scans_completed],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-lg border border-soc-border bg-soc-bg p-3">
+                <dt className="text-xs text-soc-muted">{label}</dt>
+                <dd className="mt-1 font-mono text-2xl">{value ?? '—'}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="mt-3 text-xs text-soc-muted">
+            {data?.network.last_scan_at
+              ? `Last completed scan: ${new Date(data.network.last_scan_at).toLocaleString()}. Counts come from authorized Nmap scans only.`
+              : 'No completed scans yet. Run an authorized scan to build the inventory.'}
+          </p>
+          {data && Object.keys(data.alerts_by_source).length > 0 && (
+            <div className="mt-4">
+              <p className="mb-2 text-xs uppercase tracking-wider text-soc-muted">Alerts by detection source</p>
+              <ul className="space-y-1.5">
+                {Object.entries(data.alerts_by_source).sort((a, b) => b[1] - a[1]).map(([src, n]) => (
+                  <li key={src} className="flex items-center gap-3 text-sm">
+                    <span className="w-28 shrink-0 text-soc-muted">{SOURCE_LABELS[src] ?? src}</span>
+                    <span className="h-2 rounded-full bg-soc-accent/70" style={{ width: `${(n / data.alerts.total) * 100}%`, minWidth: '4px' }} aria-hidden="true" />
+                    <span className="font-mono text-xs">{n}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </Card>
 
         <Card title="Data provenance" icon={Fingerprint}>
