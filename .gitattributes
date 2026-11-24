@@ -1,0 +1,17 @@
+# Normalise line endings in the repository (LF), whatever OS edits the files.
+* text=auto eol=lf
+
+# Shell scripts MUST have LF endings or bash fails with "\r: command not found".
+*.sh text eol=lf
+# Windows scripts keep CRLF.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+
+# Binary files: never touch.
+*.png binary
+*.jpg binary
+*.ico binary
+*.pdf binary
+*.pcap binary
+*.pcapng binary
+*.db binary
